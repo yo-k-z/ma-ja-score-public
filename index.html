@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>麻雀大会スコア</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;color:#15252a;background:#f2f6f6}*{box-sizing:border-box}body{margin:0}main{max-width:720px;margin:auto;padding:14px 14px 60px}h1{font-size:1.55rem;margin:12px 0}h2{font-size:1.15rem;margin:0 0 12px}h3{font-size:1rem;margin:12px 0 6px}.card{background:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #143c3710}label{display:block;font-weight:600;margin:10px 0 4px}input,select,textarea,button{font:inherit;width:100%;min-height:44px;padding:9px;border:1px solid #aebfc0;border-radius:9px;background:#fff;color:#15252a}textarea{min-height:115px;resize:vertical}button{background:#08645d;color:#fff;border:0;font-weight:700;margin:8px 0 0;cursor:pointer}button:disabled{background:#9da9a8;cursor:not-allowed}.secondary{background:#475f68}.danger{background:#a23439}.small{width:auto;min-height:36px;padding:6px 12px;margin-right:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hint{font-size:.86rem;line-height:1.55;color:#52636a}.line{border-top:1px solid #dce5e5;padding:10px 0}.row{display:flex;align-items:center;justify-content:space-between;gap:8px}.plus{color:#08704d;font-weight:700}.minus{color:#af3434;font-weight:700}.error{color:#a23439;font-weight:700}.notice{background:#e6f3ef;padding:10px;border-radius:8px}.muted{color:#66787d}.tag{display:inline-block;background:#e4eeed;border-radius:6px;padding:2px 6px;font-size:.8rem}.tag.manual{background:#f7e3c4;color:#7a4a12} [hidden]{display:none!important}@media(max-width:380px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body><main>
+<h1>麻雀大会スコア</h1><p class="hint">1台のスマホで、1卓でも複数卓でも記録。金銭換算は行いません。</p>
+<section class="card">
+<h2>① 大会・ルール設定</h2>
+<label for="eventSelect">開く大会</label><select id="eventSelect"></select>
+<details id="createDetails"><summary>新しい大会を作る</summary>
+<label for="eventName">大会名</label><input id="eventName" placeholder="例：秋の麻雀会">
+<label for="roster">参加者名（1行に1人）</label><textarea id="roster" placeholder="田中&#10;佐藤&#10;鈴木&#10;高橋"></textarea>
+<h3>4人打ちのルール</h3><div class="grid"><div><label for="start4">持ち点</label><input id="start4" type="number" inputmode="numeric" value="25000"></div><div><label for="return4">返し点</label><input id="return4" type="number" inputmode="numeric" value="30000"></div></div>
+<label for="uma4">ウマ（1位から4位、カンマ区切り）</label><input id="uma4" value="20,10,-10,-20">
+<h3>3人打ちのルール</h3><div class="grid"><div><label for="start3">持ち点</label><input id="start3" type="number" inputmode="numeric" value="35000"></div><div><label for="return3">返し点</label><input id="return3" type="number" inputmode="numeric" value="40000"></div></div>
+<label for="uma3">ウマ（1位から3位、カンマ区切り）</label><input id="uma3" value="20,0,-20">
+<label for="rounding">1,000点単位の端数処理</label><select id="rounding"><option value="half">四捨五入（500点から切り上げ）</option><option value="six">五捨六入（600点から切り上げ）</option><option value="none">端数処理なし（0.1ポイント単位）</option></select>
+<p class="hint">数値は例です。大会の取り決めに合わせて変更してください。大会作成後はルールを固定します。飛び・焼き鳥は半荘ごとに受け払いを入力します。</p>
+<button id="createEvent">大会を作成</button></details>
+<div id="ruleDisplay" class="hint"></div>
+</section>
+<section class="card" id="memberSection" hidden><h2>② 参加者名簿</h2><div id="memberList"></div>
+<div class="grid"><div><label for="newMember">途中参加者を追加</label><input id="newMember" placeholder="参加者名"></div><div style="align-self:end"><button id="addMember">追加</button></div></div>
+<p class="hint">名前の修正は「名前を修正」から。過去の半荘結果にも同じ参加者として反映されます。</p></section>
+<section class="card" id="entrySection" hidden><h2>③ 半荘の結果を入力</h2>
+<div class="grid"><div><label for="tableName">卓名</label><input id="tableName" placeholder="例：A卓"></div><div><label for="roundNumber">この卓の半荘番号</label><input id="roundNumber" type="number" inputmode="numeric" min="1" value="1"></div></div>
+<label for="playerCount">人数</label><select id="playerCount"><option value="4">4人打ち</option><option value="3">3人打ち</option></select>
+<div id="editNotice" class="notice" hidden></div>
+<div id="playerFields"></div>
+<p class="hint">起家から席順に入力してください。同点は起家に近い方を上位とします。飛び・焼き鳥の調整は「受取＋／支払－」で入力し、各項目の全員合計を0にしてください。未配分の供託点はルールに沿って持ち点へ配分してから入力してください。</p>
+<p class="hint" id="manualHint" hidden>修正では「最終精算ポイント」を直接入力できます。「自動計算する」で素点から計算した値を入れてから、同点時のウマ分けなど大会運営の特例を手で反映してください。自動計算値と違う値で保存した半荘は「手動修正」として記録し、通算成績には手入力した最終精算ポイントを使います。全員合計は0にしてください。</p>
+<button id="autoCalc" class="secondary" hidden>自動計算する</button><div id="autoResult" class="hint"></div>
+<button id="saveGame">この半荘を登録</button><button id="cancelEdit" class="secondary" hidden>修正をやめる</button></section>
+<section class="card" id="summarySection" hidden><h2>④ 大会の通算成績</h2><div id="summary"></div><h2 style="margin-top:22px">半荘の記録</h2><div id="games"></div></section>
+<section class="card"><h2>⑤ バックアップ</h2><button id="exportData" class="secondary">全大会をファイルに保存</button><label for="importData">保存したファイルから復元</label><input id="importData" type="file" accept=".json,application/json"><p class="hint">半荘登録・名簿変更のたびにこのブラウザにも保存します。ファイルから復元すると、現在の全大会データは置き換わります。大会中も定期的にファイル保存してください。</p></section>
+</main><script>
+'use strict';
+const KEY='mahjong-score-v2', OLD_KEY='mahjong-score-v1';
+const $=id=>document.getElementById(id);
+const id=()=>crypto.randomUUID();
+const norm=s=>String(s).normalize('NFKC').trim();
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SEATS={4:['起家・東家','南家','西家','北家'],3:['起家・東家','南家','西家']};
+let data={version:2,events:[],currentId:null},editingId=null;
+function readStored(){
+  try{
+    const v2=localStorage.getItem(KEY);
+    if(v2){data=validateData(JSON.parse(v2));return}
+    const v1=localStorage.getItem(OLD_KEY);
+    if(v1){data=migrateV1(JSON.parse(v1));persist();alert('前回版の大会記録を読み込みました。バックアップも保存してください。')}
+  }catch(e){alert('保存データを読み込めませんでした。新規大会を作る前に、元のデータを確認してください。\n'+e.message)}
+}
+function validateData(d){
+  if(!d||d.version!==2||!Array.isArray(d.events)||d.events.some(e=>
+    typeof e.id!=='string'||typeof e.name!=='string'||!Array.isArray(e.members)||
+    !Array.isArray(e.games)||!e.rules||!["half","six","none"].includes(e.rounding)||
+    [3,4].some(n=>{const r=e.rules[n];return !r||!Number.isInteger(r.start)||r.start<=0||
+      !Number.isInteger(r.returned)||r.returned<=0||!Array.isArray(r.uma)||
+      r.uma.length!==n||r.uma.some(x=>typeof x!=='number'||!Number.isFinite(x))})||
+    e.members.some(m=>typeof m.id!=='string'||typeof m.name!=='string')||
+    e.games.some(g=>typeof g.id!=='string'||!Array.isArray(g.players)||
+      !['undefined','boolean'].includes(typeof g.manual)||
+      g.players.some(p=>typeof p.memberId!=='string'||!Number.isFinite(p.total10)))
+  ))throw Error('対応していないデータ形式です');
+  return d;
+}
+function migrateV1(old){
+  if(!old||!Array.isArray(old.events))throw Error('旧版データの形式が不正です');
+  const events=old.events.map(e=>{
+    const members=[],lookup=new Map();
+    const games=(e.games||[]).map(g=>({
+      id:g.id||id(),table:g.table,round:g.round,count:g.count,
+      players:(g.players||[]).map(p=>{
+        const key=norm(p.name);if(!lookup.has(key)){
+          const member={id:id(),name:key};members.push(member);lookup.set(key,member.id)
+        }
+        return {memberId:lookup.get(key),score:p.score,tobi10:Math.round((p.tobi||0)*10),
+          yakitori10:Math.round((p.yakitori||0)*10),base10:Math.round((p.base||0)*10),
+          total10:Math.round((p.total||0)*10),index:p.index||0};
+      })
+    }));
+    return {id:e.id||id(),name:e.name||'旧大会',members,games,rules:e.rules,
+      rounding:e.rounding||'half'};
+  });
+  return validateData({version:2,events,currentId:old.currentId||null});
+}
+function persist(){
+  try{localStorage.setItem(KEY,JSON.stringify(data));return true}
+  catch(e){alert('端末への保存に失敗しました。すぐにバックアップファイルを保存してください。\n'+e.message);return false}
+}
+function eventNow(){return data.events.find(e=>e.id===data.currentId)}
+function readUma(input,n){
+  const a=$(input).value.split(',').map(s=>s.trim());
+  if(a.length!==n||a.some(s=>s===''||!Number.isFinite(Number(s))||
+    !Number.isInteger(Number(s)*10)))throw Error(`${n}人打ちのウマを${n}個、0.1ポイント単位で入力してください`);
+  const v=a.map(Number);
+  if(Math.abs(v.reduce((x,y)=>x+y,0))>0.000001)throw Error(`${n}人打ちのウマの合計を0にしてください`);
+  return v;
+}
+function positiveInt(input){const raw=$(input).value,v=Number(raw);if(raw===''||!Number.isInteger(v)||v<=0||v%100!==0)throw Error('持ち点・返し点は100点単位の正の整数にしてください');return v}
+function uniqueNames(names){return new Set(names.map(norm)).size===names.length}
+function createEvent(){
+  try{
+    const name=norm($('eventName').value),names=$('roster').value.split(/\r?\n/).map(norm).filter(Boolean);
+    if(!name||names.length<3)throw Error('大会名と参加者を3人以上入力してください');
+    if(!uniqueNames(names))throw Error('参加者名が重複しています');
+    const rules={4:{start:positiveInt('start4'),returned:positiveInt('return4'),uma:readUma('uma4',4)},
+      3:{start:positiveInt('start3'),returned:positiveInt('return3'),uma:readUma('uma3',3)}};
+    const e={id:id(),name,members:names.map(name=>({id:id(),name})),rules,
+      rounding:$('rounding').value,games:[]};
+    data.events.push(e);data.currentId=e.id;persist();$('createDetails').open=false;resetEntry();render();
+  }catch(err){alert(err.message)}
+}
+function addMember(){
+  const e=eventNow();if(!e)return;
+  const name=norm($('newMember').value);
+  if(!name||e.members.some(m=>norm(m.name)===name))return alert('名前が空欄、または登録済みです');
+  e.members.push({id:id(),name});$('newMember').value='';persist();render();
+}
+function renameMember(memberId){
+  const e=eventNow(),m=e?.members.find(m=>m.id===memberId);if(!m)return;
+  const entered=prompt('新しい表示名',m.name);if(entered===null)return;
+  const name=norm(entered);
+  if(!name||e.members.some(other=>other.id!==m.id&&norm(other.name)===name))return alert('名前が空欄、または登録済みです');
+  m.name=name;persist();render();
+}
+function renderFields(){
+  const e=eventNow(),count=Number($('playerCount').value),editing=!!editingId;
+  $('manualHint').hidden=!editing;$('autoCalc').hidden=!editing;
+  if(!editing)$('autoResult').textContent='';
+  if(!e){$('playerFields').replaceChildren();$('playerFields').dataset.mode='';return}
+  $('playerFields').dataset.mode=editing?'edit':'new';
+  const options='<option value="">参加者を選択</option>'+e.members.map(m=>
+    `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
+  const seats=SEATS[count]||[];
+  $('playerFields').innerHTML=Array.from({length:count},(_,i)=>`
+    <div class="line player-field"><h3>対局者 ${i+1}${seats[i]?`（${seats[i]}）`:''}</h3>
+      <label>参加者</label><select class="member-id">${options}</select>
+      <label>${editing?'素点（終了時の持ち点）':'終了時の持ち点'}</label><input class="score" type="number" inputmode="numeric" step="100" placeholder="例：32000">
+      <div class="grid"><div><label>飛び調整（ポイント）</label><input class="tobi" type="number" inputmode="decimal" step="0.1" value="0"></div>
+      <div><label>焼き鳥調整（ポイント）</label><input class="yakitori" type="number" inputmode="decimal" step="0.1" value="0"></div></div>
+      ${editing?'<label>最終精算ポイント（ウマ・オカ反映後）</label><input class="final" type="number" inputmode="decimal" step="0.1">':''}</div>`).join('');
+}
+function readAdjustment(input,label){
+  if(input.value.trim()==='')throw Error(label+'が空欄です');
+  const n=Number(input.value);
+  if(!Number.isFinite(n)||Math.abs(n*10-Math.round(n*10))>0.000001)throw Error(label+'は0.1ポイント単位で入力してください');
+  return Math.round(n*10);
+}
+function roundBase10(diff,method){
+  if(method==='none')return diff/100;
+  const abs=Math.abs(diff),whole=Math.floor(abs/1000),remainder=abs%1000;
+  const magnitude=(whole+(remainder>=(method==='six'?600:500)?1:0))*10;
+  return magnitude===0?0:Math.sign(diff)*magnitude;
+}
+function readGame(useFinal=true){
+  const e=eventNow(),table=norm($('tableName').value),rawRound=$('roundNumber').value,
+    round=Number(rawRound),count=Number($('playerCount').value);
+  if(!e||!table||rawRound===''||!Number.isInteger(round)||round<1)throw Error('大会・卓名・半荘番号を確認してください');
+  if(e.games.some(g=>g.id!==editingId&&g.table===table&&g.round===round))throw Error('この卓・半荘番号は登録済みです');
+  const rule=e.rules[count],fields=[...document.querySelectorAll('.player-field')];
+  const players=fields.map((f,index)=>{
+    const memberId=f.querySelector('.member-id').value,scoreRaw=f.querySelector('.score').value;
+    const score=Number(scoreRaw);
+    if(!e.members.some(m=>m.id===memberId)||scoreRaw===''||!Number.isInteger(score)||score%100!==0)
+      throw Error('全員の参加者と100点単位の持ち点を入力してください');
+    return {memberId,score,index,tobi10:readAdjustment(f.querySelector('.tobi'),'飛び調整'),
+      yakitori10:readAdjustment(f.querySelector('.yakitori'),'焼き鳥調整')};
+  });
+  if(new Set(players.map(p=>p.memberId)).size!==count)throw Error('同じ半荘で同じ参加者は選べません');
+  const sum=players.reduce((a,p)=>a+p.score,0);
+  if(sum!==rule.start*count)throw Error(`持ち点合計が${sum}点です。${rule.start*count}点になるよう確認してください（未配分の供託点にも注意）。`);
+  for(const key of ['tobi10','yakitori10'])if(players.reduce((a,p)=>a+p[key],0)!==0)
+    throw Error((key==='tobi10'?'飛び':'焼き鳥')+'調整は、全員の合計を0にしてください');
+  const auto=autoSettle(players,rule,e.rounding);
+  let ranked=auto,manual=false;
+  // 修正画面では、自動計算値の代わりに手入力した最終精算ポイントを採用できる（大会運営の特例用）。
+  const finals=useFinal?[...document.querySelectorAll('.final')]:[];
+  if(finals.length===count){
+    const byIndex=new Map(auto.map(p=>[p.index,p.total10]));
+    const entered=finals.map(f=>readAdjustment(f,'最終精算ポイント'));
+    if(entered.reduce((a,v)=>a+v,0)!==0)throw Error('最終精算ポイントは、全員の合計を0にしてください');
+    manual=players.some(p=>entered[p.index]!==byIndex.get(p.index));
+    if(manual)ranked=players.map(p=>({...p,total10:entered[p.index],
+      base10:entered[p.index]-p.tobi10-p.yakitori10}))
+      .sort((a,b)=>b.total10-a.total10||a.index-b.index);
+  }
+  if(ranked.reduce((a,p)=>a+p.total10,0)!==0)throw Error('ポイント合計が0になりません');
+  const game={id:editingId||id(),table,round,count,players:ranked};
+  if(manual)game.manual=true;
+  return game;
+}
+// 素点からの自動精算（順位は持ち点優先、同点は index＝起家からの席順が小さい方を上位。
+// 同順位にはせずウマ・オカも分配しない。オカと端数処理の残差は1位が受け取る）
+function autoSettle(players,rule,rounding){
+  const ranked=players.map(p=>({...p})).sort((a,b)=>b.score-a.score||a.index-b.index);
+  ranked.forEach((p,i)=>p.base10=roundBase10(p.score-rule.returned,rounding)+Math.round(rule.uma[i]*10));
+  ranked[0].base10=-ranked.slice(1).reduce((a,p)=>a+p.base10,0);
+  ranked.forEach(p=>p.total10=p.base10+p.tobi10+p.yakitori10);
+  return ranked;
+}
+// 「自動計算する」：素点から計算した最終精算ポイントを入力欄へ反映（保存はしない）
+function autoCalc(){
+  try{
+    const e=eventNow(),game=readGame(false),fields=[...document.querySelectorAll('.player-field')];
+    for(const p of game.players)fields[p.index].querySelector('.final').value=p.total10/10;
+    $('autoResult').textContent='自動計算を反映しました（'+game.players.map((p,i)=>
+      `${i+1}位 ${e.members.find(m=>m.id===p.memberId)?.name||'登録外'} ${p.total10>0?'+':''}${p.total10/10}`
+    ).join('／')+'）。必要なら手で直してから保存してください。';
+  }catch(err){alert(err.message)}
+}
+function saveGame(){
+  try{
+    const e=eventNow(),game=readGame();
+    // 素点を直しただけで「自動計算する」を押し忘れた場合に、古い精算値が手動修正として残らないよう確認する
+    if(game.manual&&!confirm('最終精算ポイントが自動計算値と異なります。この半荘を「手動修正」として保存しますか？\n自動計算値で保存する場合は、キャンセルして「自動計算する」を押してください。'))return;
+    if(editingId){const at=e.games.findIndex(g=>g.id===editingId);if(at<0)throw Error('修正対象が見つかりません');e.games[at]=game}
+    else e.games.push(game);
+    const next=game.round+1,table=game.table;
+    persist();resetEntry();$('tableName').value=table;$('roundNumber').value=next;render();
+  }catch(err){alert(err.message)}
+}
+function resetEntry(){editingId=null;$('saveGame').textContent='この半荘を登録';$('cancelEdit').hidden=true;
+  $('editNotice').hidden=true;$('editNotice').textContent='';
+  $('tableName').value='';$('roundNumber').value='1';renderFields()}
+function editGame(gameId){
+  const g=eventNow()?.games.find(g=>g.id===gameId);if(!g)return;
+  editingId=g.id;$('tableName').value=g.table;$('roundNumber').value=g.round;
+  $('playerCount').value=String(g.count);renderFields();
+  const fields=[...document.querySelectorAll('.player-field')];
+  [...g.players].sort((a,b)=>a.index-b.index).forEach((p,i)=>{
+    fields[i].querySelector('.member-id').value=p.memberId;
+    fields[i].querySelector('.score').value=p.score;
+    fields[i].querySelector('.tobi').value=p.tobi10/10;
+    fields[i].querySelector('.yakitori').value=p.yakitori10/10;
+    fields[i].querySelector('.final').value=p.total10/10;
+  });
+  $('autoResult').textContent='';
+  $('editNotice').textContent=`修正中：${g.table}・${g.round}半荘目（${g.count}人打ち）`+
+    (g.manual?'／この半荘は手動修正済みです。':'')+'対局者・素点・最終精算ポイントを確認して保存してください。';
+  $('editNotice').hidden=false;
+  $('saveGame').textContent='修正内容を保存';$('cancelEdit').hidden=false;
+  $('entrySection').scrollIntoView({behavior:'smooth'});
+}
+function deleteGame(gameId){
+  const e=eventNow();if(!e||!confirm('この半荘を削除しますか？'))return;
+  e.games=e.games.filter(g=>g.id!==gameId);if(editingId===gameId)resetEntry();persist();render();
+}
+// 手動修正した半荘は最終精算ポイント順に並べ、同ポイントは同順位として表示する
+function gameRank(g,i){
+  if(!g.manual)return i+1;
+  let rank=i+1;
+  while(rank>1&&g.players[rank-2].total10===g.players[i].total10)rank--;
+  return rank;
+}
+function point(tenths){const n=tenths/10;return `<span class="${n<0?'minus':'plus'}">${n>0?'+':''}${n.toFixed(Number.isInteger(n)?0:1)}</span>`}
+function render(){
+  $('eventSelect').innerHTML='<option value="">大会を選択</option>'+data.events.map(e=>
+    `<option value="${esc(e.id)}" ${e.id===data.currentId?'selected':''}>${esc(e.name)}</option>`).join('');
+  const e=eventNow();for(const section of ['memberSection','entrySection','summarySection'])$(section).hidden=!e;
+  if(!e){$('ruleDisplay').textContent='';return}
+  $('ruleDisplay').innerHTML=`<p class="notice">${esc(e.name)}：参加者${e.members.length}人、登録済み${e.games.length}半荘</p>`+
+    [4,3].map(n=>{const r=e.rules[n];return `<p>${n}人打ち：${r.start.toLocaleString()}点持ち・${r.returned.toLocaleString()}点返し／ウマ ${r.uma.join('・')}</p>`}).join('');
+  $('memberList').innerHTML=e.members.map(m=>`<div class="line row"><span>${esc(m.name)}</span><button class="small secondary rename" data-id="${esc(m.id)}">名前を修正</button></div>`).join('');
+  const totals=new Map(e.members.map(m=>[m.id,{name:m.name,total10:0,count:0}]));
+  for(const g of e.games)for(const p of g.players){const t=totals.get(p.memberId);if(t){t.total10+=p.total10;t.count++}}
+  $('summary').innerHTML=[...totals.values()].filter(t=>t.count).sort((a,b)=>b.total10-a.total10)
+    .map(t=>`<div class="line row"><span>${esc(t.name)} <small class="muted">${t.count}半荘</small></span>${point(t.total10)}</div>`).join('')||'<p class="muted">まだ半荘の記録がありません。</p>';
+  $('games').innerHTML=[...e.games].reverse().map(g=>`<div class="line"><strong>${esc(g.table)}・${g.round}半荘目（${g.count}人打ち）</strong>${g.manual?' <span class="tag manual">手動修正</span>':''}`+
+    g.players.map((p,i)=>`<div class="row"><span>${gameRank(g,i)}位 ${esc(e.members.find(m=>m.id===p.memberId)?.name||'登録外')} <small class="muted">${Number(p.score).toLocaleString()}点</small></span>${point(p.total10)}</div>`).join('')+
+    `<button class="small secondary edit" data-id="${esc(g.id)}">修正</button><button class="small danger delete" data-id="${esc(g.id)}">削除</button></div>`).join('')||'<p class="muted">記録なし</p>';
+  renderFieldsIfNeeded();
+}
+function renderFieldsIfNeeded(){if(document.querySelectorAll('.player-field').length!==Number($('playerCount').value)||
+  $('playerFields').dataset.mode!==(editingId?'edit':'new'))renderFields();
+  else{const e=eventNow();document.querySelectorAll('.member-id').forEach(select=>{
+    const chosen=select.value;select.innerHTML='<option value="">参加者を選択</option>'+e.members.map(m=>
+      `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');select.value=chosen;
+  })}}
+function exportData(){
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='mahjong-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),30000);
+}
+async function importData(ev){
+  const file=ev.target.files[0];if(!file)return;
+  try{
+    const candidate=validateData(JSON.parse(await file.text()));
+    if(!confirm('現在の全大会データを、このファイルの内容で置き換えますか？'))return;
+    const old=data;data=candidate;
+    if(!persist()){data=old;return}
+    resetEntry();render();alert('復元しました');
+  }catch(err){alert('読み込みに失敗しました：'+err.message)}
+  finally{ev.target.value=''}
+}
+$('createEvent').addEventListener('click',createEvent);
+$('addMember').addEventListener('click',addMember);
+$('saveGame').addEventListener('click',saveGame);
+$('autoCalc').addEventListener('click',autoCalc);
+$('cancelEdit').addEventListener('click',resetEntry);
+$('playerCount').addEventListener('change',()=>{if(editingId){editingId=null;$('saveGame').textContent='この半荘を登録';$('cancelEdit').hidden=true;$('editNotice').hidden=true;$('editNotice').textContent=''}renderFields()});
+$('eventSelect').addEventListener('change',ev=>{data.currentId=ev.target.value||null;persist();resetEntry();render()});
+$('memberList').addEventListener('click',ev=>{const b=ev.target.closest('.rename');if(b)renameMember(b.dataset.id)});
+$('games').addEventListener('click',ev=>{const b=ev.target.closest('button[data-id]');if(!b)return;
+  if(b.classList.contains('edit'))editGame(b.dataset.id);else if(b.classList.contains('delete'))deleteGame(b.dataset.id)});
+$('exportData').addEventListener('click',exportData);
+$('importData').addEventListener('change',importData);
+readStored();render();
+</script></body></html>
