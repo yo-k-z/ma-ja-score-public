@@ -5,11 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>麻雀大会スコア</title>
 <style>
-:root{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;color:#15252a;background:#f2f6f6}*{box-sizing:border-box}body{margin:0}main{max-width:720px;margin:auto;padding:14px 14px 60px}h1{font-size:1.55rem;margin:12px 0}h2{font-size:1.15rem;margin:0 0 12px}h3{font-size:1rem;margin:12px 0 6px}.card{background:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #143c3710}label{display:block;font-weight:600;margin:10px 0 4px}input,select,textarea,button{font:inherit;width:100%;min-height:44px;padding:9px;border:1px solid #aebfc0;border-radius:9px;background:#fff;color:#15252a}textarea{min-height:115px;resize:vertical}button{background:#08645d;color:#fff;border:0;font-weight:700;margin:8px 0 0;cursor:pointer}button:disabled{background:#9da9a8;cursor:not-allowed}.secondary{background:#475f68}.danger{background:#a23439}.small{width:auto;min-height:36px;padding:6px 12px;margin-right:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hint{font-size:.86rem;line-height:1.55;color:#52636a}.line{border-top:1px solid #dce5e5;padding:10px 0}.row{display:flex;align-items:center;justify-content:space-between;gap:8px}.plus{color:#08704d;font-weight:700}.minus{color:#af3434;font-weight:700}.error{color:#a23439;font-weight:700}.notice{background:#e6f3ef;padding:10px;border-radius:8px}.muted{color:#66787d}.tag{display:inline-block;background:#e4eeed;border-radius:6px;padding:2px 6px;font-size:.8rem}.tag.manual{background:#f7e3c4;color:#7a4a12} [hidden]{display:none!important}@media(max-width:380px){.grid{grid-template-columns:1fr}}
+:root{font-family:system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;color:#15252a;background:#f2f6f6}*{box-sizing:border-box}body{margin:0}main{max-width:720px;margin:auto;padding:14px 14px 60px}h1{font-size:1.55rem;margin:12px 0}h2{font-size:1.15rem;margin:0 0 12px}h3{font-size:1rem;margin:12px 0 6px}.card{background:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #143c3710}label{display:block;font-weight:600;margin:10px 0 4px}input,select,textarea,button{font:inherit;width:100%;min-height:44px;padding:9px;border:1px solid #aebfc0;border-radius:9px;background:#fff;color:#15252a}textarea{min-height:115px;resize:vertical}button{background:#08645d;color:#fff;border:0;font-weight:700;margin:8px 0 0;cursor:pointer}button:disabled{background:#9da9a8;cursor:not-allowed}.secondary{background:#475f68}.danger{background:#a23439}.small{width:auto;min-height:36px;padding:6px 12px;margin-right:6px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hint{font-size:.86rem;line-height:1.55;color:#52636a}.line{border-top:1px solid #dce5e5;padding:10px 0}.row{display:flex;align-items:center;justify-content:space-between;gap:8px}.plus{color:#08704d;font-weight:700}.minus{color:#af3434;font-weight:700}.error{color:#a23439;font-weight:700}.notice{background:#e6f3ef;padding:10px;border-radius:8px}.alert{background:#fdecec;border:1px solid #e0b4b4}.alert h2{color:#8f2a2e}.muted{color:#66787d}.tag{display:inline-block;background:#e4eeed;border-radius:6px;padding:2px 6px;font-size:.8rem}.tag.manual{background:#f7e3c4;color:#7a4a12} [hidden]{display:none!important}@media(max-width:380px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
 <h1>麻雀大会スコア</h1><p class="hint">1台のスマホで、1卓でも複数卓でも記録。金銭換算は行いません。</p>
+<section class="card alert" id="storageAlert" hidden><h2 id="storageTitle"></h2><p class="hint" id="storageBody"></p>
+<button id="saveBroken" class="secondary" hidden>読み込めないデータをファイルに保存</button>
+<button id="discardBroken" class="danger" hidden>読み込めないデータを破棄して新しく使い始める</button></section>
 <section class="card">
 <h2>① 大会・ルール設定</h2>
 <label for="eventSelect">開く大会</label><select id="eventSelect"></select>
@@ -48,13 +51,26 @@ const norm=s=>String(s).normalize('NFKC').trim();
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SEATS={4:['起家・東家','南家','西家','北家'],3:['起家・東家','南家','西家']};
 let data={version:2,events:[],currentId:null},editingId=null;
+// readFailure: 保存データを読み込めなかったとき、その内容を保持して上書きを止める
+// writeFailed: 直前の保存が失敗したまま（バックアップを促し続ける）
+let readFailure=null,writeFailed=false,storageError='';
 function readStored(){
+  let raw=null,key=KEY;
   try{
-    const v2=localStorage.getItem(KEY);
-    if(v2){data=validateData(JSON.parse(v2));return}
-    const v1=localStorage.getItem(OLD_KEY);
-    if(v1){data=migrateV1(JSON.parse(v1));persist();alert('前回版の大会記録を読み込みました。バックアップも保存してください。')}
-  }catch(e){alert('保存データを読み込めませんでした。新規大会を作る前に、元のデータを確認してください。\n'+e.message)}
+    raw=localStorage.getItem(KEY);
+    if(raw){data=validateData(JSON.parse(raw));return}
+    key=OLD_KEY;raw=localStorage.getItem(OLD_KEY);
+    if(raw){
+      data=migrateV1(JSON.parse(raw));
+      alert(persist()?'前回版の大会記録を読み込みました。バックアップも保存してください。'
+        :'前回版の大会記録を読み込みましたが、この端末に保存できませんでした。前回版のデータは残っています。すぐにバックアップファイルを保存してください。\n\n詳細：'+storageError);
+    }
+  }catch(e){
+    // 壊れた／未対応の保存データを上書きしないよう、以降の保存を止めて復元を促す
+    data={version:2,events:[],currentId:null};
+    readFailure={message:e.message,raw:typeof raw==='string'?raw:'',key};
+  }
+  renderStorageAlert();
 }
 function validateData(d){
   if(!d||d.version!==2||!Array.isArray(d.events)||d.events.some(e=>
@@ -91,8 +107,54 @@ function migrateV1(old){
   return validateData({version:2,events,currentId:old.currentId||null});
 }
 function persist(){
-  try{localStorage.setItem(KEY,JSON.stringify(data));return true}
-  catch(e){alert('端末への保存に失敗しました。すぐにバックアップファイルを保存してください。\n'+e.message);return false}
+  if(readFailure){storageError='読み込めなかった保存データを上書きしないよう、保存を停止しています。';return false}
+  try{localStorage.setItem(KEY,JSON.stringify(data));storageError='';
+    if(writeFailed){writeFailed=false;renderStorageAlert()}
+    return true}
+  catch(e){storageError=e.message;writeFailed=true;renderStorageAlert();return false}
+}
+// data を書き換えてから保存し、保存できなければ書き換えを取り消して false を返す。
+// 呼び出し側は false のとき画面をリセットしない（入力内容を残して再試行できるようにする）。
+function commit(change,what){
+  const restore=JSON.stringify(data);
+  try{change()}catch(err){data=JSON.parse(restore);throw err}
+  if(persist())return true;
+  data=JSON.parse(restore);
+  alert(readFailure
+    ?`保存データを読み込めなかったため、${what}は保存していません。元のデータを上書きしないよう保存を停止しています。\n入力内容はそのまま残しています。画面上部の案内から読み込めないデータをファイルに保存し、「⑤ バックアップ」で正しいバックアップから復元してください。`
+    :`端末への保存に失敗したため、${what}は保存されていません。\n入力内容はそのまま残しています。「⑤ バックアップ」でファイルに保存し、ブラウザの空き容量やプライベートモードの設定を確認してから、もう一度お試しください。\n\n詳細：${storageError}`);
+  return false;
+}
+function renderStorageAlert(){
+  const box=$('storageAlert');if(!box)return;
+  box.hidden=!(readFailure||writeFailed);
+  $('saveBroken').hidden=!(readFailure&&readFailure.raw);
+  $('discardBroken').hidden=!readFailure;
+  if(readFailure){
+    $('storageTitle').textContent='保存データを読み込めませんでした';
+    $('storageBody').textContent='元のデータを上書きしないよう、この端末への保存を停止しています。'+
+      (readFailure.raw?'読み込めなかった内容は下のボタンでファイルに残せます。':'')+
+      '正しいバックアップファイルがあれば「⑤ バックアップ」から復元してください。復元すると保存を再開します。詳細：'+readFailure.message;
+  }else if(writeFailed){
+    $('storageTitle').textContent='この端末に保存できていません';
+    $('storageBody').textContent='直前の保存に失敗しました。記録を失わないよう、「⑤ バックアップ」で今すぐファイルに保存してください。詳細：'+storageError;
+  }
+}
+// 読み込めなかった保存データをそのままファイルへ（復旧用）
+function saveBroken(){
+  if(!readFailure||!readFailure.raw)return;
+  const blob=new Blob([readFailure.raw],{type:'text/plain'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='mahjong-unreadable-'+new Date().toISOString().slice(0,10)+'.txt';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),30000);
+}
+// 復元できない場合の最終手段。破棄は利用者の明示操作のみ。
+function discardBroken(){
+  if(!readFailure)return;
+  if(!confirm('読み込めない保存データを破棄して、新しく使い始めます。この操作は取り消せません。\n先に「読み込めないデータをファイルに保存」で控えを取りましたか？'))return;
+  const broken=readFailure;readFailure=null;
+  if(!persist()){readFailure=broken;renderStorageAlert();
+    return alert('端末への保存に失敗したため、破棄していません。読み込めないデータはそのまま残っています。\n\n詳細：'+storageError)}
+  renderStorageAlert();resetEntry();render();
 }
 function eventNow(){return data.events.find(e=>e.id===data.currentId)}
 function readUma(input,n){
@@ -114,21 +176,24 @@ function createEvent(){
       3:{start:positiveInt('start3'),returned:positiveInt('return3'),uma:readUma('uma3',3)}};
     const e={id:id(),name,members:names.map(name=>({id:id(),name})),rules,
       rounding:$('rounding').value,games:[]};
-    data.events.push(e);data.currentId=e.id;persist();$('createDetails').open=false;resetEntry();render();
+    if(!commit(()=>{data.events.push(e);data.currentId=e.id},'大会の作成'))return;
+    $('createDetails').open=false;resetEntry();render();
   }catch(err){alert(err.message)}
 }
 function addMember(){
   const e=eventNow();if(!e)return;
   const name=norm($('newMember').value);
   if(!name||e.members.some(m=>norm(m.name)===name))return alert('名前が空欄、または登録済みです');
-  e.members.push({id:id(),name});$('newMember').value='';persist();render();
+  if(!commit(()=>e.members.push({id:id(),name}),'参加者の追加'))return;
+  $('newMember').value='';render();
 }
 function renameMember(memberId){
   const e=eventNow(),m=e?.members.find(m=>m.id===memberId);if(!m)return;
   const entered=prompt('新しい表示名',m.name);if(entered===null)return;
   const name=norm(entered);
   if(!name||e.members.some(other=>other.id!==m.id&&norm(other.name)===name))return alert('名前が空欄、または登録済みです');
-  m.name=name;persist();render();
+  if(!commit(()=>{m.name=name},'名前の修正'))return;
+  render();
 }
 function renderFields(){
   const e=eventNow(),count=Number($('playerCount').value),editing=!!editingId;
@@ -220,10 +285,12 @@ function saveGame(){
     const e=eventNow(),game=readGame();
     // 素点を直しただけで「自動計算する」を押し忘れた場合に、古い精算値が手動修正として残らないよう確認する
     if(game.manual&&!confirm('最終精算ポイントが自動計算値と異なります。この半荘を「手動修正」として保存しますか？\n自動計算値で保存する場合は、キャンセルして「自動計算する」を押してください。'))return;
-    if(editingId){const at=e.games.findIndex(g=>g.id===editingId);if(at<0)throw Error('修正対象が見つかりません');e.games[at]=game}
-    else e.games.push(game);
+    const at=editingId?e.games.findIndex(g=>g.id===editingId):-1;
+    if(editingId&&at<0)throw Error('修正対象が見つかりません');
+    // 保存できなければ登録は成立させず、入力内容を残したままにする
+    if(!commit(()=>{if(editingId)e.games[at]=game;else e.games.push(game)},editingId?'修正内容':'この半荘'))return;
     const next=game.round+1,table=game.table;
-    persist();resetEntry();$('tableName').value=table;$('roundNumber').value=next;render();
+    resetEntry();$('tableName').value=table;$('roundNumber').value=next;render();
   }catch(err){alert(err.message)}
 }
 function resetEntry(){editingId=null;$('saveGame').textContent='この半荘を登録';$('cancelEdit').hidden=true;
@@ -250,7 +317,8 @@ function editGame(gameId){
 }
 function deleteGame(gameId){
   const e=eventNow();if(!e||!confirm('この半荘を削除しますか？'))return;
-  e.games=e.games.filter(g=>g.id!==gameId);if(editingId===gameId)resetEntry();persist();render();
+  if(!commit(()=>{e.games=e.games.filter(g=>g.id!==gameId)},'この半荘の削除'))return;
+  if(editingId===gameId)resetEntry();render();
 }
 // 手動修正した半荘は最終精算ポイント順に並べ、同ポイントは同順位として表示する
 function gameRank(g,i){
@@ -292,10 +360,12 @@ async function importData(ev){
   const file=ev.target.files[0];if(!file)return;
   try{
     const candidate=validateData(JSON.parse(await file.text()));
-    if(!confirm('現在の全大会データを、このファイルの内容で置き換えますか？'))return;
-    const old=data;data=candidate;
-    if(!persist()){data=old;return}
-    resetEntry();render();alert('復元しました');
+    if(!confirm(readFailure?'読み込めなかった保存データを、このファイルの内容で置き換えて保存を再開しますか？'
+      :'現在の全大会データを、このファイルの内容で置き換えますか？'))return;
+    const old=data,oldFailure=readFailure;data=candidate;readFailure=null;
+    if(!persist()){data=old;readFailure=oldFailure;renderStorageAlert();
+      return alert('端末への保存に失敗したため、復元していません。元のデータはそのまま残っています。\n\n詳細：'+storageError)}
+    renderStorageAlert();resetEntry();render();alert('復元しました');
   }catch(err){alert('読み込みに失敗しました：'+err.message)}
   finally{ev.target.value=''}
 }
@@ -305,10 +375,13 @@ $('saveGame').addEventListener('click',saveGame);
 $('autoCalc').addEventListener('click',autoCalc);
 $('cancelEdit').addEventListener('click',resetEntry);
 $('playerCount').addEventListener('change',()=>{if(editingId){editingId=null;$('saveGame').textContent='この半荘を登録';$('cancelEdit').hidden=true;$('editNotice').hidden=true;$('editNotice').textContent=''}renderFields()});
-$('eventSelect').addEventListener('change',ev=>{data.currentId=ev.target.value||null;persist();resetEntry();render()});
+$('eventSelect').addEventListener('change',ev=>{const chosen=ev.target.value||null;
+  commit(()=>{data.currentId=chosen},'開いている大会の切り替え');resetEntry();render()});
 $('memberList').addEventListener('click',ev=>{const b=ev.target.closest('.rename');if(b)renameMember(b.dataset.id)});
 $('games').addEventListener('click',ev=>{const b=ev.target.closest('button[data-id]');if(!b)return;
   if(b.classList.contains('edit'))editGame(b.dataset.id);else if(b.classList.contains('delete'))deleteGame(b.dataset.id)});
+$('saveBroken').addEventListener('click',saveBroken);
+$('discardBroken').addEventListener('click',discardBroken);
 $('exportData').addEventListener('click',exportData);
 $('importData').addEventListener('change',importData);
 readStored();render();
